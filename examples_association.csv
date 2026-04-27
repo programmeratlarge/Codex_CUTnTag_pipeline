@@ -1,0 +1,8 @@
+sample_id,species,genome,antibody,condition,replicate,group_id,is_control,control_group_id,merge_group_id,peak_calling_mode,notes
+K27ac_A_rep1,human,hg38,H3K27ac,treated,1,K27ac_A_rep1,false,IgG_A,H3K27ac_treated,narrow,treated replicate 1
+K27ac_A_rep2,human,hg38,H3K27ac,treated,2,K27ac_A_rep2,false,IgG_A,H3K27ac_treated,narrow,treated replicate 2
+K27ac_B_rep1,human,hg38,H3K27ac,control,1,K27ac_B_rep1,false,IgG_B,H3K27ac_control,narrow,control replicate 1
+K27ac_B_rep2,human,hg38,H3K27ac,control,2,K27ac_B_rep2,false,IgG_B,H3K27ac_control,narrow,control replicate 2
+IgG_A_rep1,human,hg38,IgG,treated,1,IgG_A,true,,IgG_A,narrow,matched IgG control for treated
+IgG_B_rep1,human,hg38,IgG,control,1,IgG_B,true,,IgG_B,narrow,matched IgG control for control condition
+
