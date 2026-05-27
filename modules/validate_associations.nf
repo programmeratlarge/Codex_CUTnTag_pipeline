@@ -7,6 +7,7 @@ process VALIDATE_ASSOCIATIONS {
     input:
     path fastq_pairs
     path association_csv
+    val target_genome
     val allow_extra_rows
     val allow_control_free
     val call_control_peaks
@@ -17,6 +18,7 @@ process VALIDATE_ASSOCIATIONS {
     path 'sample_peak_jobs.tsv', emit: sample_peak_jobs
     path 'group_peak_jobs.tsv', emit: group_peak_jobs
     path 'consensus_jobs.tsv', emit: consensus_jobs
+    path 'samples_excluded_by_genome.tsv', emit: excluded_by_genome
     path 'metadata.validation.json', emit: metadata_json
     path 'association_validation_report.txt', emit: report
 
@@ -25,6 +27,7 @@ process VALIDATE_ASSOCIATIONS {
     python ${projectDir}/bin/validate_associations.py \\
       --fastq-pairs ${fastq_pairs} \\
       --association-csv ${association_csv} \\
+      --target-genome '${target_genome}' \\
       --outdir . \\
       ${allow_extra_rows ? '--allow-extra-association-rows' : ''} \\
       ${allow_control_free ? '--allow-control-free-peak-calling' : ''} \\

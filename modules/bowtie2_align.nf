@@ -26,4 +26,3 @@ process BOWTIE2_ALIGN {
     samtools index -@ ${task.cpus} ${meta.sample_id}.sorted.bam
     """
 }
-

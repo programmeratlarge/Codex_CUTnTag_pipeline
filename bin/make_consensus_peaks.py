@@ -95,10 +95,15 @@ def main() -> int:
         handle.write("# description: Union peak counts for comparable non-control merged groups.\n")
         writer = csv.DictWriter(handle, fieldnames=["comparable_set_id", "peak_count"], delimiter="\t")
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(
+            {
+                "comparable_set_id": row["comparable_set_id"],
+                "peak_count": row["peak_count"],
+            }
+            for row in rows
+        )
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

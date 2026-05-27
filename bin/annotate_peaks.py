@@ -229,7 +229,14 @@ def main() -> int:
         handle.write("# description: Genomic annotation distribution of called peaks.\n")
         writer = csv.DictWriter(handle, fieldnames=["peak_set", "category", "count"], delimiter="\t")
         writer.writeheader()
-        writer.writerows(summary_rows)
+        writer.writerows(
+            {
+                "peak_set": row["peak_set"],
+                "category": row["category"],
+                "count": row["count"],
+            }
+            for row in summary_rows
+        )
 
     write_plot(summary_rows, outdir)
     return 0
@@ -237,4 +244,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

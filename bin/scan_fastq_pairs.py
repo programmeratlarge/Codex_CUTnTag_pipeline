@@ -49,6 +49,15 @@ def detect(path: Path, user_pattern=None):
     return None, None, None
 
 
+def discover_fastqs(input_dir: Path):
+    """Return FASTQ files under input_dir, including all nested subdirectories."""
+    return sorted(
+        path
+        for path in input_dir.rglob("*")
+        if path.is_file() and FASTQ_SUFFIX_RE.search(path.name)
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-dir", required=True)
@@ -61,7 +70,7 @@ def main() -> int:
         raise SystemExit(f"Input directory does not exist or is not a directory: {input_dir}")
 
     user_pattern = compile_user_pattern(args.paired_pattern)
-    fastqs = sorted(p for p in input_dir.rglob("*") if p.is_file() and FASTQ_SUFFIX_RE.search(p.name))
+    fastqs = discover_fastqs(input_dir)
     groups = defaultdict(lambda: {"1": [], "2": [], "patterns": set(), "unmatched": []})
     unmatched = []
 
@@ -133,4 +142,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -63,7 +63,7 @@ def prepare_one(row, args, bam_map, script_dir: Path):
         (job_out / "SKIPPED_CONTROL.txt").write_text("Control peak calling skipped by default.\n", encoding="utf-8")
         return {
             "id": job_id, "macs_name": macs_name, "level": args.level, "mode": mode,
-            "status": "skipped_control", "peak_count": 0, "peak_file": "", "script": "",
+            "status": "skipped_control", "peak_count": 0, "peak_file": "",
         }, None
     if not treatment:
         raise RuntimeError(f"No BAM found for {args.level} job {job_id}")
@@ -97,7 +97,7 @@ def prepare_one(row, args, bam_map, script_dir: Path):
     )
     return {
         "id": job_id, "macs_name": macs_name, "level": args.level, "mode": mode,
-        "status": "pending", "peak_count": 0, "peak_file": str(peaks), "script": str(script),
+        "status": "pending", "peak_count": 0, "peak_file": str(peaks),
     }, script
 
 

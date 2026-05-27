@@ -26,8 +26,22 @@ process DEDUP_BAM {
         > \${sample}.dedup_metrics.txt 2>&1
       samtools index -@ ${task.cpus} \${sample}.final.bam
     elif [[ '${params.dedup_mode}' == 'picard' ]]; then
-      picard MarkDuplicates \\
+      ${params.picard_cmd} AddOrReplaceReadGroups \\
         I=${bam} \\
+        O=\${sample}.with_rg.bam \\
+        RGID=\${sample} \\
+        RGLB=\${sample} \\
+        RGPL=ILLUMINA \\
+        RGPU=\${sample} \\
+        RGSM=\${sample} \\
+        SORT_ORDER=coordinate \\
+        CREATE_INDEX=true \\
+        VALIDATION_STRINGENCY=SILENT
+      [[ -s \${sample}.with_rg.bai ]] && mv \${sample}.with_rg.bai \${sample}.with_rg.bam.bai
+      [[ -s \${sample}.with_rg.bam.bai ]] || samtools index -@ ${task.cpus} \${sample}.with_rg.bam
+
+      ${params.picard_cmd} MarkDuplicates \\
+        I=\${sample}.with_rg.bam \\
         O=\${sample}.final.bam \\
         M=\${sample}.dedup_metrics.txt \\
         REMOVE_DUPLICATES=true \\
@@ -36,6 +50,7 @@ process DEDUP_BAM {
         VALIDATION_STRINGENCY=SILENT
       [[ -s \${sample}.final.bai ]] && mv \${sample}.final.bai \${sample}.final.bam.bai
       [[ -s \${sample}.final.bam.bai ]] || samtools index -@ ${task.cpus} \${sample}.final.bam
+      rm -f \${sample}.with_rg.bam \${sample}.with_rg.bam.bai
     elif [[ '${params.dedup_mode}' == 'none' ]]; then
       cp ${bam} \${sample}.final.bam
       cp ${bai} \${sample}.final.bam.bai
@@ -59,4 +74,3 @@ ${meta.sample_id}	\${input_fragments}	\${final_fragments}	\${removed}	\${dup_rat
 EOF
     """
 }
-

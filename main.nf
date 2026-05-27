@@ -12,6 +12,7 @@ include { COUNT_FASTQ as COUNT_TRIM } from './modules/count_fastq'
 include { CUTADAPT_PE }            from './modules/cutadapt'
 include { BOWTIE2_ALIGN }          from './modules/bowtie2_align'
 include { ALIGNMENT_QC }           from './modules/alignment_qc'
+include { REFERENCE_COMPATIBILITY } from './modules/reference_compatibility'
 include { FILTER_BAM }             from './modules/filter_bam'
 include { DEDUP_BAM }              from './modules/dedup_bam'
 include { READ_RETENTION }         from './modules/read_retention'
@@ -77,6 +78,7 @@ workflow CUTNTAG_PE {
     VALIDATE_ASSOCIATIONS(
         SCAN_FASTQ_PAIRS.out.pairs,
         file(params.association_csv),
+        params.genome,
         params.allow_extra_association_rows,
         params.allow_control_free_peak_calling,
         params.call_control_peaks
@@ -120,6 +122,13 @@ workflow CUTNTAG_PE {
 
     BOWTIE2_ALIGN(CUTADAPT_PE.out.fastq)
     ALIGNMENT_QC(BOWTIE2_ALIGN.out.bam)
+    REFERENCE_COMPATIBILITY(
+        BOWTIE2_ALIGN.out.bam.first(),
+        file(params.chrom_sizes),
+        params.blacklist ?: '',
+        params.annotation_gtf ?: '',
+        params.tss_bed ?: ''
+    )
 
     FILTER_BAM(BOWTIE2_ALIGN.out.bam, params.blacklist ?: '')
     DEDUP_BAM(FILTER_BAM.out.bam)
@@ -234,12 +243,10 @@ workflow CUTNTAG_PE {
     )
 
     tss_mqc_ch = Channel.empty()
-    tss_deeptools_ch = Channel.empty()
     if (params.tss_bed) {
         DEEPTOOLS_TSS(BAMCOVERAGE_BW.out.bigwig.map { meta, bw -> bw }.collect(), file(params.tss_bed))
         TSS_ENRICHMENT(BAMCOVERAGE_BW.out.bigwig.map { meta, bw -> bw }.collect(), file(params.tss_bed))
         tss_mqc_ch = TSS_ENRICHMENT.out.files
-        tss_deeptools_ch = DEEPTOOLS_TSS.out.files
     }
 
     DEEPTOOLS_PEAKS(
@@ -270,8 +277,6 @@ workflow CUTNTAG_PE {
         .mix(TOOL_VERSIONS.out.versions)
         .mix(annotation_mqc_ch)
         .mix(tss_mqc_ch.flatten())
-        .mix(tss_deeptools_ch.flatten())
-        .mix(DEEPTOOLS_PEAKS.out.files.flatten())
         .collect()
 
     MULTIQC_FINAL(final_mqc_ch)

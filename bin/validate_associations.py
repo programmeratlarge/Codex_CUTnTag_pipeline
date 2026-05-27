@@ -70,6 +70,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--fastq-pairs", required=True)
     parser.add_argument("--association-csv", required=True)
+    parser.add_argument("--target-genome", required=True)
     parser.add_argument("--outdir", required=True)
     parser.add_argument("--allow-extra-association-rows", action="store_true")
     parser.add_argument("--allow-control-free-peak-calling", action="store_true")
@@ -79,15 +80,14 @@ def main() -> int:
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     errors, warnings = [], []
+    target_genome = args.target_genome.strip()
+    if not target_genome:
+        errors.append("--target-genome must not be blank")
 
     pairs = read_tsv(Path(args.fastq_pairs))
-    pair_errors = [r for r in pairs if r.get("status") == "ERROR"]
-    if pair_errors:
-        errors.extend(f"FASTQ pairing error for {r.get('sample_id') or r.get('r1')}: {r.get('message')}" for r in pair_errors)
     pair_rows = [r for r in pairs if r.get("sample_id") and r.get("status") == "OK"]
     pair_ids = {r["sample_id"] for r in pair_rows}
-    if not pair_ids:
-        errors.append("No valid FASTQ pairs were detected.")
+    detected_pair_ids = {r["sample_id"] for r in pairs if r.get("sample_id")}
 
     assoc = read_csv(Path(args.association_csv))
     assoc_by_id = {}
@@ -109,30 +109,66 @@ def main() -> int:
 
     assoc_ids = set(assoc_by_id)
     missing = sorted(pair_ids - assoc_ids)
-    extra = sorted(assoc_ids - pair_ids)
+    target_assoc_ids = {
+        sid for sid, row in assoc_by_id.items()
+        if str(row.get("genome", "")).strip() == target_genome
+    }
+    extra = sorted(target_assoc_ids - detected_pair_ids)
     if missing:
         errors.append("FASTQ sample_id values missing from association_csv: " + ", ".join(missing))
     if extra and not args.allow_extra_association_rows:
-        errors.append("association_csv contains sample_id rows without FASTQ pairs: " + ", ".join(extra))
+        errors.append(
+            f"association_csv contains --genome {target_genome} sample_id rows without FASTQ pairs: "
+            + ", ".join(extra)
+        )
     elif extra:
-        warnings.append("Ignoring extra association rows without FASTQ pairs: " + ", ".join(extra))
+        warnings.append(
+            f"Ignoring extra --genome {target_genome} association rows without FASTQ pairs: "
+            + ", ".join(extra)
+        )
 
-    rows = []
+    selected_rows = []
+    excluded_by_genome = []
     for pair in pair_rows:
         sid = pair["sample_id"]
         if sid not in assoc_by_id:
             continue
         row = dict(assoc_by_id[sid])
         row.update(pair)
+        if str(row.get("genome", "")).strip() != target_genome:
+            excluded_by_genome.append({
+                "sample_id": sid,
+                "association_genome": row.get("genome", ""),
+                "target_genome": target_genome,
+                "reason": "association genome does not match --genome",
+            })
+            continue
         for col in ["species", "genome", "antibody", "condition", "replicate", "group_id", "merge_group_id"]:
             if not str(row.get(col, "")).strip():
                 errors.append(f"{sid}: required association field {col} is blank")
-        rows.append(row)
+        selected_rows.append(row)
+
+    pair_errors = [r for r in pairs if r.get("status") == "ERROR"]
+    for pair_error in pair_errors:
+        sid = pair_error.get("sample_id", "")
+        assoc_row = assoc_by_id.get(sid)
+        if assoc_row and str(assoc_row.get("genome", "")).strip() != target_genome:
+            excluded_by_genome.append({
+                "sample_id": sid,
+                "association_genome": assoc_row.get("genome", ""),
+                "target_genome": target_genome,
+                "reason": f"non-target genome FASTQ pair has scanner error and was skipped: {pair_error.get('message', '')}",
+            })
+            continue
+        errors.append(f"FASTQ pairing error for {sid or pair_error.get('r1')}: {pair_error.get('message')}")
+
+    if not selected_rows:
+        errors.append(f"No valid FASTQ pairs matched --genome {target_genome}.")
 
     merge_groups = defaultdict(list)
     group_ids_to_control_samples = defaultdict(list)
     merge_ids_to_control_samples = defaultdict(list)
-    for row in rows:
+    for row in selected_rows:
         merge_groups[row["merge_group_id"]].append(row)
         if row.get("is_control_norm"):
             group_ids_to_control_samples[row["group_id"]].append(row)
@@ -194,7 +230,7 @@ def main() -> int:
     samplesheet = []
     group_members = []
     sample_peak_jobs = []
-    for row in rows:
+    for row in selected_rows:
         sid = row["sample_id"]
         pair = pair_by_id[sid]
         is_control = bool(row["is_control_norm"])
@@ -310,9 +346,14 @@ def main() -> int:
         "comparable_set_id", "merge_group_ids", "macs_names", "peak_calling_mode",
         "species", "genome", "antibody"
     ], consensus_rows)
+    write_table(outdir / "samples_excluded_by_genome.tsv", [
+        "sample_id", "association_genome", "target_genome", "reason"
+    ], excluded_by_genome)
 
     metadata = {
+        "target_genome": target_genome,
         "sample_count": len(samplesheet),
+        "excluded_by_genome_count": len(excluded_by_genome),
         "merge_group_count": len(group_peak_jobs),
         "consensus_set_count": len(consensus_rows),
         "warnings": warnings,
@@ -320,7 +361,14 @@ def main() -> int:
         "call_control_peaks": args.call_control_peaks,
     }
     (outdir / "metadata.validation.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-    report_lines = ["VALIDATION PASSED", "", f"Samples: {len(samplesheet)}", f"Merge groups: {len(group_peak_jobs)}"]
+    report_lines = [
+        "VALIDATION PASSED",
+        "",
+        f"Target genome: {target_genome}",
+        f"Samples selected for processing: {len(samplesheet)}",
+        f"Samples excluded by genome: {len(excluded_by_genome)}",
+        f"Merge groups: {len(group_peak_jobs)}",
+    ]
     if warnings:
         report_lines += ["", "Warnings:"] + [f"- {w}" for w in warnings]
     (outdir / "association_validation_report.txt").write_text("\n".join(report_lines) + "\n", encoding="utf-8")

@@ -135,7 +135,13 @@ def main() -> int:
         handle.write("# description: Median BigWig signal enrichment at TSS centers over flanking signal.\n")
         writer = csv.DictWriter(handle, fieldnames=["sample_id", "median_tss_enrichment"], delimiter="\t")
         writer.writeheader()
-        writer.writerows(summary)
+        writer.writerows(
+            {
+                "sample_id": row["sample_id"],
+                "median_tss_enrichment": row["median_tss_enrichment"],
+            }
+            for row in summary
+        )
     write_plot(summary, score_map, outdir)
     return 0
 

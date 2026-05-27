@@ -27,7 +27,7 @@ Singularity/Apptainer is recommended on HPC. Provide an all-in-one SIF with `--c
 Required parameters:
 
 ```text
---input_dir        Directory containing paired-end FASTQ files
+ --input_dir        Directory containing paired-end FASTQ files; scanned recursively through all subdirectories
 --outdir           Output directory
 --genome           Genome identifier, e.g. hg38, mm10, rn6, custom
 --bowtie2_index    Bowtie2 index basename
@@ -63,7 +63,7 @@ Column definitions:
 
 - `sample_id`: Must exactly match the FASTQ-derived sample ID.
 - `species`: `human`, `mouse`, `rat`, or `custom`.
-- `genome`: Genome build such as `hg38`, `mm10`, `rn6`.
+- `genome`: Genome build such as `hg38`, `mm10`, `rn6`. Only rows whose `genome` value exactly matches the run-level `--genome` parameter are processed.
 - `antibody`: Target antibody such as `H3K27ac`, `H3K4me3`, `IgG`, `Input`.
 - `condition`: Biological condition, treatment, cell type, or experimental group.
 - `replicate`: Biological replicate identifier.
@@ -74,7 +74,7 @@ Column definitions:
 - `peak_calling_mode`: `narrow`, `broad`, or `auto`. Auto uses broad for broad histone marks such as H3K27me3 and narrow otherwise.
 - `notes`: Optional free text.
 
-Validation fails early if FASTQ samples are missing from the CSV, extra rows are present without `--allow_extra_association_rows`, merge groups mix incompatible species/genome/antibody/condition values, or treatment groups lack a valid control unless `--allow_control_free_peak_calling true` is set.
+The association CSV may contain multiple genomes. For a run with `--genome hg38`, only rows with `genome=hg38` are converted into pipeline samples, groups, controls, and downstream jobs; rows for other genomes are listed in `00_fastq_pairs/samples_excluded_by_genome.tsv` and are not processed. Validation fails early if selected-genome FASTQ samples are missing from the CSV, selected-genome extra rows are present without `--allow_extra_association_rows`, merge groups mix incompatible species/genome/antibody/condition values, or treatment groups lack a valid selected-genome control unless `--allow_control_free_peak_calling true` is set.
 
 See `examples_association.csv` for a minimal example.
 
@@ -106,6 +106,7 @@ The workflow uses explicit validation-generated tables to keep treatment-control
 
 - `fastq_pairs.tsv`: scanner output with sample ID, R1, R2, input directory, detected pattern, and status.
 - `samplesheet.validated.tsv`: FASTQ paths joined to association metadata.
+- `samples_excluded_by_genome.tsv`: FASTQ samples present in the input tree but excluded because their association-table genome does not match `--genome`.
 - `sample_peak_jobs.tsv`: per-sample MACS3 treatment/control jobs.
 - `group_members.tsv`: sample-to-merge-group map.
 - `group_peak_jobs.tsv`: merged treatment/control peak-calling jobs.
@@ -116,8 +117,12 @@ This design avoids fragile implicit grouping in channel code and makes failures 
 ## Key defaults and recommendations
 
 - Bowtie2 uses `--very-sensitive --dovetail --no-mixed --no-discordant`, a common paired-end CUT&Tag choice.
+- The Picard branch defensively normalizes sample-level read groups before duplicate marking so `MarkDuplicates` has valid `RG` tags on every record, even when upstream BAMs were produced without read groups.
 - Filtering keeps properly paired reads, removes low MAPQ alignments, removes mitochondrial reads, optionally removes blacklist overlaps, then deduplicates.
 - Picard duplicate removal is the default. Use `--dedup_mode umi_tools --umi_enabled true` only when UMIs are present in read names or have been extracted upstream.
+- On the target server, Picard is invoked as `java -jar /programs/picard-tools-3.4.0/picard.jar`; override `--picard_cmd` only when running in a different software environment.
+- BedGraph sorting uses chromosome names and order from each BAM header so `chr1` versus `1` differences in an external `--chrom_sizes` file do not break track generation. Reference-side files used for biology, especially blacklist BED, GTF, and TSS BED, should still use the same contig naming convention as the Bowtie2 index.
+- After the first BAM is produced, `pipeline_info/reference_contig_compatibility.*` records whether `--chrom_sizes`, blacklist BED, annotation GTF, and TSS BED share chromosome names with the BAM header. A chromosome-sizes mismatch fails early; optional biological references emit warnings when they share no contigs.
 - BigWigs default to CPM. RPGC is available but requires `--effective_genome_size`.
 - MACS3 uses BAMPE mode. Controls are strongly recommended for CUT&Tag, especially IgG or input controls.
 

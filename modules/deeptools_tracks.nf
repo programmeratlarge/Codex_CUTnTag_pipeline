@@ -50,11 +50,24 @@ process BAMCOVERAGE_BEDGRAPH {
         --normalizeUsing ${params.normalize_using} \\
         ${eff} \\
         ${params.bamcoverage_extra}
-      if [[ -s '${params.chrom_sizes}' ]]; then
-        bedtools sort -faidx '${params.chrom_sizes}' -i ${meta.sample_id}.bedgraph | bgzip -c > ${meta.sample_id}.bedgraph.gz
-      else
-        sort -k1,1 -k2,2n ${meta.sample_id}.bedgraph | bgzip -c > ${meta.sample_id}.bedgraph.gz
-      fi
+
+      # Use the BAM header as the sorting authority. The BedGraph coordinates
+      # come from this BAM, so its contig names/order always match even when a
+      # user-supplied chromosome sizes file uses a different naming convention
+      # such as chr1 versus 1.
+      samtools view -H ${bam} \\
+        | awk -F'\\t' '/^@SQ/ {
+            sn=""; ln="";
+            for (i=1; i<=NF; i++) {
+              if (\$i ~ /^SN:/) sn=substr(\$i,4);
+              if (\$i ~ /^LN:/) ln=substr(\$i,4);
+            }
+            if (sn != "" && ln != "") print sn "\\t" ln;
+          }' \\
+        > ${meta.sample_id}.bam.chrom.sizes
+
+      bedtools sort -faidx ${meta.sample_id}.bam.chrom.sizes -i ${meta.sample_id}.bedgraph \\
+        | bgzip -c > ${meta.sample_id}.bedgraph.gz
       tabix -p bed ${meta.sample_id}.bedgraph.gz || touch ${meta.sample_id}.bedgraph.gz.tbi
     else
       touch ${meta.sample_id}.bedgraph.gz
