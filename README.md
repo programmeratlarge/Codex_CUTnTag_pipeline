@@ -1,3 +1,19 @@
+> [!CAUTION]
+> **Research prototype — not validated for scientific use**
+>
+> This pipeline is an experimental, AI-generated research artifact with known
+> implementation and reporting flaws. **It should not be used to process,
+> analyze, or interpret experimental data.**
+>
+> This repository was created as part of a study evaluating AI coding agents
+> for bioinformatics pipeline construction. The pipeline required debugging
+> during testing and did not fully reproduce the behavior or outputs of the
+> hand-coded reference pipeline.
+>
+> The code is provided only for research, evaluation, and reproducibility of
+> the study. Anyone adapting this code should independently validate every
+> processing step and output against an appropriate validated workflow.
+
 # Paired-end CUT&Tag Nextflow DSL2 Pipeline
 
 Version: 0.1.0
